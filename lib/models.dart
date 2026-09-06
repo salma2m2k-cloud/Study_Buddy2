@@ -4,20 +4,21 @@ import 'dart:math';
 String newId() {
   final rand = Random();
   final ts = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
-  final rnd = List.generate(6, (_) => rand.nextInt(36).toRadixString(36)).join();
+  final rnd =
+      List.generate(6, (_) => rand.nextInt(36).toRadixString(36)).join();
   return '$ts$rnd';
 }
 
 class Task {
   String id;
   String title;
-  String? date; // 'yyyy-MM-dd'
-  String? time; // 'HH:mm'
+  String? date;
+  String? time;
   String description;
   bool reminder;
-  int reminderLead; // minutes before due time
+  int reminderLead;
   bool done;
-  String createdAt; // ISO 8601
+  String createdAt;
 
   Task({
     required this.id,
@@ -34,8 +35,17 @@ class Task {
   DateTime? get dueDateTime {
     if (date == null || date!.isEmpty) return null;
     final parts = date!.split('-').map(int.parse).toList();
-    final t = (time != null && time!.isNotEmpty) ? time!.split(':').map(int.parse).toList() : [23, 59];
-    return DateTime(parts[0], parts[1], parts[2], t[0], t[1]);
+    final t = (time != null && time!.isNotEmpty)
+        ? time!.split(':').map(int.parse).toList()
+        : [23, 59];
+
+    return DateTime(
+      parts[0],
+      parts[1],
+      parts[2],
+      t[0],
+      t[1],
+    );
   }
 
   Map<String, dynamic> toJson() => {
@@ -59,7 +69,9 @@ class Task {
         reminder: j['reminder'] as bool? ?? false,
         reminderLead: j['reminderLead'] as int? ?? 10,
         done: j['done'] as bool? ?? false,
-        createdAt: j['createdAt'] as String? ?? DateTime.now().toIso8601String(),
+        createdAt:
+            j['createdAt'] as String? ??
+            DateTime.now().toIso8601String(),
       );
 }
 
@@ -68,8 +80,8 @@ class ClassItem {
   String name;
   String subject;
   String teacher;
-  int day; // 0 = Sunday .. 6 = Saturday, matches DateTime.weekday % 7
-  String? startTime; // 'HH:mm'
+  int day;
+  String? startTime;
   String? endTime;
   String location;
   String notes;
@@ -119,21 +131,63 @@ class ClassItem {
       );
 }
 
+/// Records one completed occurrence of a recurring class.
+///
+/// The ClassItem itself is NEVER marked as permanently completed.
+/// Instead, this records that this particular class happened on
+/// this particular date.
+class ClassCompletion {
+  String id;
+  String classId;
+  String date; // yyyy-MM-dd
+
+  ClassCompletion({
+    required this.id,
+    required this.classId,
+    required this.date,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'classId': classId,
+        'date': date,
+      };
+
+  factory ClassCompletion.fromJson(Map<String, dynamic> j) =>
+      ClassCompletion(
+        id: j['id'] as String,
+        classId: j['classId'] as String? ?? '',
+        date: j['date'] as String? ?? '',
+      );
+}
+
 class Note {
   String id;
   String title;
   String body;
   String updatedAt;
 
-  Note({required this.id, this.title = '', this.body = '', required this.updatedAt});
+  Note({
+    required this.id,
+    this.title = '',
+    this.body = '',
+    required this.updatedAt,
+  });
 
-  Map<String, dynamic> toJson() => {'id': id, 'title': title, 'body': body, 'updatedAt': updatedAt};
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'body': body,
+        'updatedAt': updatedAt,
+      };
 
   factory Note.fromJson(Map<String, dynamic> j) => Note(
         id: j['id'] as String,
         title: j['title'] as String? ?? '',
         body: j['body'] as String? ?? '',
-        updatedAt: j['updatedAt'] as String? ?? DateTime.now().toIso8601String(),
+        updatedAt:
+            j['updatedAt'] as String? ??
+            DateTime.now().toIso8601String(),
       );
 }
 
@@ -163,22 +217,27 @@ class StudySessionRecord {
         'endedAt': endedAt,
       };
 
-  factory StudySessionRecord.fromJson(Map<String, dynamic> j) => StudySessionRecord(
+  factory StudySessionRecord.fromJson(Map<String, dynamic> j) =>
+      StudySessionRecord(
         id: j['id'] as String,
         subject: j['subject'] as String? ?? '',
         topic: j['topic'] as String? ?? '',
         durationMs: j['durationMs'] as int? ?? 0,
-        startedAt: j['startedAt'] as String? ?? DateTime.now().toIso8601String(),
-        endedAt: j['endedAt'] as String? ?? DateTime.now().toIso8601String(),
+        startedAt:
+            j['startedAt'] as String? ??
+            DateTime.now().toIso8601String(),
+        endedAt:
+            j['endedAt'] as String? ??
+            DateTime.now().toIso8601String(),
       );
 }
 
 class ActiveSession {
   String subject;
   String topic;
-  String status; // 'running' | 'paused'
-  String runningSince; // ISO 8601, meaningful only while running
-  int accumulatedMs; // elapsed time banked from previous run/pause cycles
+  String status;
+  String runningSince;
+  int accumulatedMs;
   String startedAt;
 
   ActiveSession({
@@ -192,9 +251,13 @@ class ActiveSession {
 
   int elapsedMs() {
     var ms = accumulatedMs;
+
     if (status == 'running') {
-      ms += DateTime.now().difference(DateTime.parse(runningSince)).inMilliseconds;
+      ms += DateTime.now()
+          .difference(DateTime.parse(runningSince))
+          .inMilliseconds;
     }
+
     return ms;
   }
 
@@ -207,21 +270,26 @@ class ActiveSession {
         'startedAt': startedAt,
       };
 
-  factory ActiveSession.fromJson(Map<String, dynamic> j) => ActiveSession(
+  factory ActiveSession.fromJson(Map<String, dynamic> j) =>
+      ActiveSession(
         subject: j['subject'] as String? ?? '',
         topic: j['topic'] as String? ?? '',
         status: j['status'] as String? ?? 'running',
-        runningSince: j['runningSince'] as String? ?? DateTime.now().toIso8601String(),
+        runningSince:
+            j['runningSince'] as String? ??
+            DateTime.now().toIso8601String(),
         accumulatedMs: j['accumulatedMs'] as int? ?? 0,
-        startedAt: j['startedAt'] as String? ?? DateTime.now().toIso8601String(),
+        startedAt:
+            j['startedAt'] as String? ??
+            DateTime.now().toIso8601String(),
       );
 }
 
 class ChatMessage {
   String id;
-  String role; // 'user' | 'assistant'
+  String role;
   String content;
-  int ts; // millisecondsSinceEpoch
+  int ts;
   bool error;
 
   ChatMessage({
@@ -232,13 +300,21 @@ class ChatMessage {
     this.error = false,
   });
 
-  Map<String, dynamic> toJson() => {'id': id, 'role': role, 'content': content, 'ts': ts, 'error': error};
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'role': role,
+        'content': content,
+        'ts': ts,
+        'error': error,
+      };
 
-  factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
+  factory ChatMessage.fromJson(Map<String, dynamic> j) =>
+      ChatMessage(
         id: j['id'] as String,
         role: j['role'] as String? ?? 'user',
         content: j['content'] as String? ?? '',
-        ts: j['ts'] as int? ?? DateTime.now().millisecondsSinceEpoch,
+        ts: j['ts'] as int? ??
+            DateTime.now().millisecondsSinceEpoch,
         error: j['error'] as bool? ?? false,
       );
 }
@@ -249,8 +325,12 @@ class Conversation {
   List<ChatMessage> messages;
   String updatedAt;
 
-  Conversation({required this.id, this.title = '', List<ChatMessage>? messages, required this.updatedAt})
-      : messages = messages ?? [];
+  Conversation({
+    required this.id,
+    this.title = '',
+    List<ChatMessage>? messages,
+    required this.updatedAt,
+  }) : messages = messages ?? [];
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -259,21 +339,28 @@ class Conversation {
         'updatedAt': updatedAt,
       };
 
-  factory Conversation.fromJson(Map<String, dynamic> j) => Conversation(
+  factory Conversation.fromJson(Map<String, dynamic> j) =>
+      Conversation(
         id: j['id'] as String,
         title: j['title'] as String? ?? '',
         messages: ((j['messages'] as List?) ?? [])
-            .map((m) => ChatMessage.fromJson(Map<String, dynamic>.from(m as Map)))
+            .map(
+              (m) => ChatMessage.fromJson(
+                Map<String, dynamic>.from(m as Map),
+              ),
+            )
             .toList(),
-        updatedAt: j['updatedAt'] as String? ?? DateTime.now().toIso8601String(),
+        updatedAt:
+            j['updatedAt'] as String? ??
+            DateTime.now().toIso8601String(),
       );
 }
 
 class AppSettings {
-  String theme; // 'light' | 'dark' | 'system'
+  String theme;
   bool sound;
   bool vibration;
-  int reminderLead; // default lead minutes for new tasks/classes
+  int reminderLead;
 
   AppSettings({
     this.theme = 'system',
@@ -289,7 +376,8 @@ class AppSettings {
         'reminderLead': reminderLead,
       };
 
-  factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
+  factory AppSettings.fromJson(Map<String, dynamic> j) =>
+      AppSettings(
         theme: j['theme'] as String? ?? 'system',
         sound: j['sound'] as bool? ?? true,
         vibration: j['vibration'] as bool? ?? true,
