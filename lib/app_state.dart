@@ -765,3 +765,4 @@ Future<void> _cancelAllRemindersSafely() async {
     await _notifications.cancelAll();
   } catch (_) {}
 }
+}
