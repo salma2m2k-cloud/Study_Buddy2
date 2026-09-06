@@ -18,6 +18,7 @@ class AppState extends ChangeNotifier {
 
   List<Task> tasks = [];
   List<ClassItem> classes = [];
+  List<ClassCompletion> classCompletions = [];
   List<Note> notes = [];
   List<StudySessionRecord> sessions = [];
   ActiveSession? activeSession;
@@ -52,6 +53,19 @@ class AppState extends ChangeNotifier {
           ),
         )
         .toList();
+    final rawCompletions =
+    _storage.readJson(
+      StoreKeys.classCompletions,
+      <dynamic>[],
+    ) as List;
+
+classCompletions = rawCompletions
+    .map(
+      (e) => ClassCompletion.fromJson(
+        Map<String, dynamic>.from(e as Map),
+      ),
+    )
+    .toList();
 
     final rawNotes =
         _storage.readJson(StoreKeys.notes, <dynamic>[]) as List;
@@ -128,6 +142,12 @@ class AppState extends ChangeNotifier {
       classes.map((c) => c.toJson()).toList(),
     );
   }
+  Future<void> _persistClassCompletions() {
+  return _storage.writeJson(
+    StoreKeys.classCompletions,
+    classCompletions.map((c) => c.toJson()).toList(),
+  );
+}
 
   Future<void> _persistNotes() {
     return _storage.writeJson(
@@ -325,17 +345,19 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteClass(String id) async {
-    classes.removeWhere((c) => c.id == id);
+  classes.removeWhere((c) => c.id == id);
 
-    // Save deletion first.
-    await _persistClasses();
+  classCompletions.removeWhere(
+    (completion) => completion.classId == id,
+  );
 
-    // Remove from UI immediately.
-    notifyListeners();
+  await _persistClasses();
+  await _persistClassCompletions();
 
-    // Cancel reminder separately.
-    _cancelClassReminderSafely(id);
-  }
+  notifyListeners();
+
+  _cancelClassReminderSafely(id);
+}
 
   Future<void> _scheduleClassSafely(
     ClassItem classItem,
@@ -393,6 +415,144 @@ class AppState extends ChangeNotifier {
       leadMinutes: classItem.reminderLead,
     );
   }
+  // ============================================================
+// CLASS COMPLETION + WEEKLY PROGRESS
+// ============================================================
+
+String _dateKey(DateTime date) {
+  return '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+}
+
+/// Returns the Monday of the current week.
+DateTime get startOfCurrentWeek {
+  final now = DateTime.now();
+
+  return DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).subtract(
+    Duration(days: now.weekday - 1),
+  );
+}
+
+/// Returns the Sunday of the current week.
+DateTime get endOfCurrentWeek {
+  return startOfCurrentWeek.add(
+    const Duration(days: 6),
+  );
+}
+
+/// Returns the date on which a recurring class occurs
+/// during the current week.
+DateTime occurrenceDateFor(
+  ClassItem classItem,
+) {
+  final monday = startOfCurrentWeek;
+
+  // App day:
+  // 0 = Sunday
+  // 1 = Monday
+  // ...
+  // 6 = Saturday
+  //
+  // Convert it to Monday-based offset.
+  final offset = classItem.day == 0
+      ? 6
+      : classItem.day - 1;
+
+  return DateTime(
+    monday.year,
+    monday.month,
+    monday.day + offset,
+  );
+}
+
+/// Whether this week's occurrence of a class is completed.
+bool isClassCompletedThisWeek(
+  ClassItem classItem,
+) {
+  final date = _dateKey(
+    occurrenceDateFor(classItem),
+  );
+
+  return classCompletions.any(
+    (completion) =>
+        completion.classId == classItem.id &&
+        completion.date == date,
+  );
+}
+
+/// Mark this week's occurrence as completed.
+Future<void> finishClass(ClassItem classItem) async {
+  final date = _dateKey(
+    occurrenceDateFor(classItem),
+  );
+
+  final alreadyCompleted = classCompletions.any(
+    (completion) =>
+        completion.classId == classItem.id &&
+        completion.date == date,
+  );
+
+  if (alreadyCompleted) return;
+
+  classCompletions.add(
+    ClassCompletion(
+      id: newId(),
+      classId: classItem.id,
+      date: date,
+    ),
+  );
+
+  await _persistClassCompletions();
+  notifyListeners();
+}
+
+/// Undo completion if the student accidentally tapped it.
+Future<void> unfinishClass(ClassItem classItem) async {
+  final date = _dateKey(
+    occurrenceDateFor(classItem),
+  );
+
+  classCompletions.removeWhere(
+    (completion) =>
+        completion.classId == classItem.id &&
+        completion.date == date,
+  );
+
+  await _persistClassCompletions();
+  notifyListeners();
+}
+
+/// Number of recurring class occurrences this week.
+int get weeklyClassCount {
+  return classes.length;
+}
+
+/// Number completed this week.
+int get weeklyCompletedClassCount {
+  return classes.where(
+    isClassCompletedThisWeek,
+  ).length;
+}
+
+/// Number still remaining this week.
+int get weeklyRemainingClassCount {
+  return weeklyClassCount -
+      weeklyCompletedClassCount;
+}
+
+/// Completion percentage from 0.0 to 1.0.
+double get weeklyClassProgress {
+  if (weeklyClassCount == 0) return 0;
+
+  return weeklyCompletedClassCount /
+      weeklyClassCount;
+}
+  
 
   // ============================================================
   // RESTORE REMINDERS
@@ -577,37 +737,31 @@ class AppState extends ChangeNotifier {
   // ============================================================
 
   Future<void> clearAllData() async {
-    // Clear the actual data first.
-    tasks = [];
-    classes = [];
-    notes = [];
-    sessions = [];
-    activeSession = null;
-    conversations = [];
+  tasks = [];
+  classes = [];
+  classCompletions = [];
+  notes = [];
+  sessions = [];
+  activeSession = null;
+  conversations = [];
 
-    // Save the cleared state immediately.
-    await _storage.clearAll([
-      StoreKeys.tasks,
-      StoreKeys.classes,
-      StoreKeys.notes,
-      StoreKeys.sessions,
-      StoreKeys.activeSession,
-      StoreKeys.conversations,
-    ]);
+  await _storage.clearAll([
+    StoreKeys.tasks,
+    StoreKeys.classes,
+    StoreKeys.classCompletions,
+    StoreKeys.notes,
+    StoreKeys.sessions,
+    StoreKeys.activeSession,
+    StoreKeys.conversations,
+  ]);
 
-    // Update the UI immediately.
-    notifyListeners();
+  notifyListeners();
 
-    // Notification cancellation happens separately.
-    // It must never block clearing the user's data.
-    _cancelAllRemindersSafely();
-  }
+  _cancelAllRemindersSafely();
+}
 
-  Future<void> _cancelAllRemindersSafely() async {
-    // We don't have the old IDs anymore after clearing the lists,
-    // so there is intentionally nothing here to cancel individually.
-    //
-    // Existing scheduled notifications are replaced/cancelled when
-    // their corresponding items are changed or deleted.
-  }
+Future<void> _cancelAllRemindersSafely() async {
+  try {
+    await _notifications.cancelAll();
+  } catch (_) {}
 }
