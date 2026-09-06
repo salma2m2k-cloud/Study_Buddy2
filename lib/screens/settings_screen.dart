@@ -31,7 +31,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _refreshStatus() async {
     if (mounted) {
-      setState(() => _checkingStatus = true);
+      setState(() {
+        _checkingStatus = true;
+      });
     }
 
     final status = await _api.fetchStatus();
@@ -46,29 +48,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _refreshNotificationPermission() async {
     if (mounted) {
-      setState(() => _checkingNotifications = true);
+      setState(() {
+        _checkingNotifications = true;
+      });
     }
 
     try {
       await _notifications.init();
 
-      final androidImpl = _notifications.androidImplementation;
-      final iosImpl = _notifications.iosImplementation;
-
-      bool? granted;
+      final androidImpl =
+          _notifications.androidImplementation;
 
       if (androidImpl != null) {
-        granted = await androidImpl.areNotificationsEnabled();
-      } else if (iosImpl != null) {
-        final settings = await iosImpl.getNotificationSettings();
+        final enabled =
+            await androidImpl.areNotificationsEnabled();
 
-        granted = settings.authorizationStatus ==
-            AuthorizationStatus.authorized;
+        if (mounted) {
+          setState(() {
+            _notifPermission = enabled;
+            _checkingNotifications = false;
+          });
+        }
+
+        return;
       }
 
+      // On iOS we don't use the unsupported API from
+      // flutter_local_notifications 17.2.4.
+      //
+      // The permission button below can still request
+      // notification permission normally.
       if (mounted) {
         setState(() {
-          _notifPermission = granted;
+          _notifPermission = null;
           _checkingNotifications = false;
         });
       }
@@ -86,7 +98,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await _notifications.init();
 
-      final granted = await _notifications.requestPermissions();
+      final granted =
+          await _notifications.requestPermissions();
 
       if (mounted) {
         setState(() {
@@ -108,7 +121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Could not check notification permissions. Please try again.',
+              'Could not request notification permission. Please try again.',
             ),
           ),
         );
