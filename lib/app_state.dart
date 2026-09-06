@@ -159,72 +159,7 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  Future<void> load() async {
-  final rawTasks =
-      _storage.readJson(StoreKeys.tasks, <dynamic>[]) as List;
-  tasks = rawTasks
-      .map((e) => Task.fromJson(Map<String, dynamic>.from(e as Map)))
-      .toList();
 
-  final rawClasses =
-      _storage.readJson(StoreKeys.classes, <dynamic>[]) as List;
-  classes = rawClasses
-      .map((e) => ClassItem.fromJson(Map<String, dynamic>.from(e as Map)))
-      .toList();
-
-  final rawNotes =
-      _storage.readJson(StoreKeys.notes, <dynamic>[]) as List;
-  notes = rawNotes
-      .map((e) => Note.fromJson(Map<String, dynamic>.from(e as Map)))
-      .toList();
-
-  final rawSessions =
-      _storage.readJson(StoreKeys.sessions, <dynamic>[]) as List;
-  sessions = rawSessions
-      .map(
-        (e) => StudySessionRecord.fromJson(
-          Map<String, dynamic>.from(e as Map),
-        ),
-      )
-      .toList();
-
-  final rawActive =
-      _storage.readJson(StoreKeys.activeSession, null);
-
-  activeSession = rawActive == null
-      ? null
-      : ActiveSession.fromJson(
-          Map<String, dynamic>.from(rawActive as Map),
-        );
-
-  final rawConvos =
-      _storage.readJson(StoreKeys.conversations, <dynamic>[]) as List;
-  conversations = rawConvos
-      .map(
-        (e) => Conversation.fromJson(
-          Map<String, dynamic>.from(e as Map),
-        ),
-      )
-      .toList();
-
-  final rawSettings =
-      _storage.readJson(StoreKeys.settings, null);
-
-  settings = rawSettings == null
-      ? AppSettings()
-      : AppSettings.fromJson(
-          Map<String, dynamic>.from(rawSettings as Map),
-        );
-
-  // Mark the app as loaded BEFORE restoring reminders.
-  // Reminder problems must never stop the app from opening.
-  _loaded = true;
-  notifyListeners();
-
-  // Restore reminders in the background.
-  // This is intentionally NOT awaited.
-  _rescheduleAllRemindersSafely();
-}
 
 Future<void> _rescheduleAllRemindersSafely() async {
   for (final task in tasks) {
