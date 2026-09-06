@@ -122,21 +122,42 @@ class AppState extends ChangeNotifier {
   // ---------------- Classes ----------------
 
   Future<void> addClass(ClassItem c) async {
-    classes.add(c);
-    await _persistClasses();
+  classes.add(c);
+
+  // Save the class first so it is never lost.
+  await _persistClasses();
+
+  // Update the UI immediately.
+  notifyListeners();
+
+  // Schedule the reminder separately.
+  try {
     await _scheduleClassIfNeeded(c);
-    notifyListeners();
+  } catch (_) {
+    // A notification problem must never stop the class from being added.
   }
+}
 
   Future<void> updateClass(ClassItem c) async {
-    final idx = classes.indexWhere((x) => x.id == c.id);
-    if (idx == -1) return;
-    classes[idx] = c;
-    await _persistClasses();
+  final idx = classes.indexWhere((x) => x.id == c.id);
+  if (idx == -1) return;
+
+  classes[idx] = c;
+
+  // Save the change immediately.
+  await _persistClasses();
+
+  // Update the UI immediately.
+  notifyListeners();
+
+  // Notification work must never block the app.
+  try {
     await _notifications.cancelClassReminder(c.id);
     await _scheduleClassIfNeeded(c);
-    notifyListeners();
+  } catch (_) {
+    // Ignore notification errors.
   }
+}
 
   Future<void> deleteClass(String id) async {
     classes.removeWhere((c) => c.id == id);
