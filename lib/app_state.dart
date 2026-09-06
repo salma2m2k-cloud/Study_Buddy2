@@ -50,11 +50,9 @@ class AppState extends ChangeNotifier {
 
     _loaded = true;
     notifyListeners();
-
-    // Re-arm reminders for everything still upcoming. Covers app reinstall
-    // or any case where scheduled OS notifications and saved data could
-    // have drifted apart.
-    await _rescheduleAllReminders();
+   // Restore reminders after the app has loaded.
+   // Reminder errors must never prevent Study Buddy from opening.
+   _rescheduleAllRemindersSafely();
   }
 
   Future<void> _persistTasks() => _storage.writeJson(StoreKeys.tasks, tasks.map((t) => t.toJson()).toList());
@@ -161,14 +159,92 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  Future<void> _rescheduleAllReminders() async {
-    for (final t in tasks) {
-      if (!t.done) await _scheduleTaskIfNeeded(t);
-    }
-    for (final c in classes) {
-      await _scheduleClassIfNeeded(c);
+  Future<void> load() async {
+  final rawTasks =
+      _storage.readJson(StoreKeys.tasks, <dynamic>[]) as List;
+  tasks = rawTasks
+      .map((e) => Task.fromJson(Map<String, dynamic>.from(e as Map)))
+      .toList();
+
+  final rawClasses =
+      _storage.readJson(StoreKeys.classes, <dynamic>[]) as List;
+  classes = rawClasses
+      .map((e) => ClassItem.fromJson(Map<String, dynamic>.from(e as Map)))
+      .toList();
+
+  final rawNotes =
+      _storage.readJson(StoreKeys.notes, <dynamic>[]) as List;
+  notes = rawNotes
+      .map((e) => Note.fromJson(Map<String, dynamic>.from(e as Map)))
+      .toList();
+
+  final rawSessions =
+      _storage.readJson(StoreKeys.sessions, <dynamic>[]) as List;
+  sessions = rawSessions
+      .map(
+        (e) => StudySessionRecord.fromJson(
+          Map<String, dynamic>.from(e as Map),
+        ),
+      )
+      .toList();
+
+  final rawActive =
+      _storage.readJson(StoreKeys.activeSession, null);
+
+  activeSession = rawActive == null
+      ? null
+      : ActiveSession.fromJson(
+          Map<String, dynamic>.from(rawActive as Map),
+        );
+
+  final rawConvos =
+      _storage.readJson(StoreKeys.conversations, <dynamic>[]) as List;
+  conversations = rawConvos
+      .map(
+        (e) => Conversation.fromJson(
+          Map<String, dynamic>.from(e as Map),
+        ),
+      )
+      .toList();
+
+  final rawSettings =
+      _storage.readJson(StoreKeys.settings, null);
+
+  settings = rawSettings == null
+      ? AppSettings()
+      : AppSettings.fromJson(
+          Map<String, dynamic>.from(rawSettings as Map),
+        );
+
+  // Mark the app as loaded BEFORE restoring reminders.
+  // Reminder problems must never stop the app from opening.
+  _loaded = true;
+  notifyListeners();
+
+  // Restore reminders in the background.
+  // This is intentionally NOT awaited.
+  _rescheduleAllRemindersSafely();
+}
+
+Future<void> _rescheduleAllRemindersSafely() async {
+  for (final task in tasks) {
+    if (task.done) continue;
+
+    try {
+      await _scheduleTaskIfNeeded(task);
+    } catch (_) {
+      // Ignore individual reminder errors.
     }
   }
+
+  for (final classItem in classes) {
+    try {
+      await _scheduleClassIfNeeded(classItem);
+    } catch (_) {
+      // Ignore individual reminder errors.
+    }
+  }
+}
 
   // ---------------- Notes ----------------
 
