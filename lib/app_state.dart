@@ -70,87 +70,114 @@ class AppState extends ChangeNotifier {
   // ---------------- Tasks ----------------
 
   Future<void> addTask(Task task) async {
-    tasks.insert(0, task);
-    await _persistTasks();
-    await _scheduleTaskIfNeeded(task);
-    notifyListeners();
-  }
+  tasks.insert(0, task);
 
-  Future<void> updateTask(Task task) async {
-    final idx = tasks.indexWhere((t) => t.id == task.id);
-    if (idx == -1) return;
-    tasks[idx] = task;
-    await _persistTasks();
+  // Save the task first.
+  await _persistTasks();
+
+  // Update the UI immediately.
+  notifyListeners();
+
+  // Notification work must never block the UI.
+  try {
+    await _scheduleTaskIfNeeded(task);
+  } catch (_) {
+    // Ignore notification errors.
+  }
+}
+
+Future<void> updateTask(Task task) async {
+  final idx = tasks.indexWhere((t) => t.id == task.id);
+  if (idx == -1) return;
+
+  tasks[idx] = task;
+
+  // Save the change first.
+  await _persistTasks();
+
+  // Update the UI immediately.
+  notifyListeners();
+
+  // Notification work is secondary.
+  try {
     await _notifications.cancelTaskReminder(task.id);
     await _scheduleTaskIfNeeded(task);
-    notifyListeners();
+  } catch (_) {
+    // Ignore notification errors.
   }
+}
 
-  Future<void> toggleTask(String id) async {
-    final idx = tasks.indexWhere((t) => t.id == id);
-    if (idx == -1) return;
-    tasks[idx].done = !tasks[idx].done;
-    await _persistTasks();
+Future<void> toggleTask(String id) async {
+  final idx = tasks.indexWhere((t) => t.id == id);
+  if (idx == -1) return;
+
+  tasks[idx].done = !tasks[idx].done;
+
+  // Save immediately.
+  await _persistTasks();
+
+  // Update UI immediately.
+  notifyListeners();
+
+  // Handle notification separately.
+  try {
     if (tasks[idx].done) {
       await _notifications.cancelTaskReminder(id);
     } else {
       await _scheduleTaskIfNeeded(tasks[idx]);
     }
-    notifyListeners();
+  } catch (_) {
+    // Ignore notification errors.
   }
+}
 
-  Future<void> deleteTask(String id) async {
-    tasks.removeWhere((t) => t.id == id);
-    await _persistTasks();
+Future<void> deleteTask(String id) async {
+  tasks.removeWhere((t) => t.id == id);
+
+  // Save deletion immediately.
+  await _persistTasks();
+
+  // Update UI immediately.
+  notifyListeners();
+
+  // Cancel notification separately.
+  try {
     await _notifications.cancelTaskReminder(id);
-    notifyListeners();
+  } catch (_) {
+    // Ignore notification errors.
   }
+}
 
-  Future<void> _scheduleTaskIfNeeded(Task task) async {
-    if (task.done || !task.reminder) return;
-    final due = task.dueDateTime;
-    if (due == null) return;
-    final fireAt = due.subtract(Duration(minutes: task.reminderLead));
-    await _notifications.scheduleTaskReminder(
-      taskId: task.id,
-      title: task.title,
-      body: task.reminderLead > 0 ? 'Due in ${task.reminderLead} min' : 'Due now',
-      fireAt: fireAt,
-    );
-  }
-
-  // ---------------- Classes ----------------
-
-  Future<void> addClass(ClassItem c) async {
+Future<void> addClass(ClassItem c) async {
   classes.add(c);
 
-  // Save the class first so it is never lost.
+  // Save the class first.
   await _persistClasses();
 
   // Update the UI immediately.
   notifyListeners();
 
-  // Schedule the reminder separately.
+  // Schedule reminder separately.
   try {
     await _scheduleClassIfNeeded(c);
   } catch (_) {
-    // A notification problem must never stop the class from being added.
+    // Ignore notification errors.
   }
 }
 
-  Future<void> updateClass(ClassItem c) async {
+Future<void> updateClass(ClassItem c) async {
   final idx = classes.indexWhere((x) => x.id == c.id);
   if (idx == -1) return;
 
   classes[idx] = c;
 
-  // Save the change immediately.
+  // Save the change first.
   await _persistClasses();
 
   // Update the UI immediately.
   notifyListeners();
 
-  // Notification work must never block the app.
+  // Cancel old reminder and schedule new one separately.
   try {
     await _notifications.cancelClassReminder(c.id);
     await _scheduleClassIfNeeded(c);
@@ -159,12 +186,22 @@ class AppState extends ChangeNotifier {
   }
 }
 
-  Future<void> deleteClass(String id) async {
-    classes.removeWhere((c) => c.id == id);
-    await _persistClasses();
+Future<void> deleteClass(String id) async {
+  classes.removeWhere((c) => c.id == id);
+
+  // Save deletion immediately.
+  await _persistClasses();
+
+  // Update the UI immediately.
+  notifyListeners();
+
+  // Cancel notification separately.
+  try {
     await _notifications.cancelClassReminder(id);
-    notifyListeners();
+  } catch (_) {
+    // Ignore notification errors.
   }
+}
 
   Future<void> _scheduleClassIfNeeded(ClassItem c) async {
     if (!c.reminder || c.startTime == null || c.startTime!.isEmpty) return;
