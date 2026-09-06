@@ -118,48 +118,35 @@ class NotificationService {
 
   /// Notification appearance/behavior.
   NotificationDetails _details() {
-    return const NotificationDetails(
-      android: AndroidNotificationDetails(
-        _channelId,
-        _channelName,
-        channelDescription: _channelDescription,
-
-        // Make it a very important notification.
-        importance: Importance.max,
-        priority: Priority.max,
-
-        // Sound.
-        playSound: true,
-
-        // Strong vibration pattern:
-        // vibrate → pause → vibrate → pause → vibrate.
-        enableVibration: true,
-        vibrationPattern: Int64List.fromList([
-          0,
-          800,
-          400,
-          800,
-          400,
-          1000,
-        ]),
-
-        // Keep it visible as a heads-up notification.
-        ticker: 'Study Buddy reminder',
-
-        category: AndroidNotificationCategory.reminder,
-
-        // Show it on the lock screen.
-        visibility: NotificationVisibility.public,
-      ),
-
-      iOS: DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-        interruptionLevel: InterruptionLevel.timeSensitive,
-      ),
-    );
-  }
+  return NotificationDetails(
+    android: AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
+      importance: Importance.max,
+      priority: Priority.max,
+      playSound: true,
+      enableVibration: true,
+      vibrationPattern: Int64List.fromList([
+        0,
+        800,
+        400,
+        800,
+        400,
+        1000,
+      ]),
+      ticker: 'Study Buddy reminder',
+      category: AndroidNotificationCategory.reminder,
+      visibility: NotificationVisibility.public,
+    ),
+    iOS: const DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      interruptionLevel: InterruptionLevel.timeSensitive,
+    ),
+  );
+}
 
   /// Schedule a one-time task reminder.
   Future<void> scheduleTaskReminder({
