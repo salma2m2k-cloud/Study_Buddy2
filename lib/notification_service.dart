@@ -1,21 +1,16 @@
 import 'dart:typed_data';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tzdata;
 
-/// Study Buddy notification service.
-///
-/// Handles real OS-level reminders for tasks and recurring classes.
-/// Notifications are designed to be highly visible with sound + vibration.
 class NotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
   bool _ready = false;
 
-  // New channel ID so Android creates a fresh channel with the new
-  // sound/vibration settings instead of reusing the old channel.
   static const _channelId = 'study_buddy_alarm_reminders_v2';
   static const _channelName = 'Study Buddy Reminders';
   static const _channelDescription =
@@ -29,10 +24,7 @@ class NotificationService {
     try {
       final timezone = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(timezone.identifier));
-    } catch (_) {
-      // Keep the timezone package's default if the device timezone
-      // cannot be detected.
-    }
+    } catch (_) {}
 
     const androidInit =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -50,10 +42,6 @@ class NotificationService {
       ),
     );
 
-    // Android notification channel.
-    //
-    // MAX importance + sound + vibration makes reminders much harder
-    // to miss than a normal silent notification.
     const channel = AndroidNotificationChannel(
       _channelId,
       _channelName,
@@ -72,14 +60,24 @@ class NotificationService {
     _ready = true;
   }
 
-  /// Requests the permissions needed for visible/sounding notifications
-  /// and exact scheduled alarms.
+  AndroidFlutterLocalNotificationsPlugin?
+      get androidImplementation =>
+          _plugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+  IOSFlutterLocalNotificationsPlugin?
+      get iosImplementation =>
+          _plugin.resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>();
+
   Future<bool> requestPermissions() async {
+    if (!_ready) {
+      await init();
+    }
+
     var granted = true;
 
-    final androidImpl =
-        _plugin.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+    final androidImpl = androidImplementation;
 
     if (androidImpl != null) {
       final notifGranted =
@@ -93,9 +91,7 @@ class NotificationService {
           (exactGranted ?? true);
     }
 
-    final iosImpl =
-        _plugin.resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>();
+    final iosImpl = iosImplementation;
 
     if (iosImpl != null) {
       final iosGranted = await iosImpl.requestPermissions(
@@ -116,39 +112,37 @@ class NotificationService {
   int _idForClass(String classId) =>
       ('class:$classId').hashCode & 0x7fffffff;
 
-  /// Notification appearance/behavior.
   NotificationDetails _details() {
-  return NotificationDetails(
-    android: AndroidNotificationDetails(
-      _channelId,
-      _channelName,
-      channelDescription: _channelDescription,
-      importance: Importance.max,
-      priority: Priority.max,
-      playSound: true,
-      enableVibration: true,
-      vibrationPattern: Int64List.fromList([
-        0,
-        800,
-        400,
-        800,
-        400,
-        1000,
-      ]),
-      ticker: 'Study Buddy reminder',
-      category: AndroidNotificationCategory.reminder,
-      visibility: NotificationVisibility.public,
-    ),
-    iOS: const DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-      interruptionLevel: InterruptionLevel.timeSensitive,
-    ),
-  );
-}
+    return NotificationDetails(
+      android: AndroidNotificationDetails(
+        _channelId,
+        _channelName,
+        channelDescription: _channelDescription,
+        importance: Importance.max,
+        priority: Priority.max,
+        playSound: true,
+        enableVibration: true,
+        vibrationPattern: Int64List.fromList([
+          0,
+          800,
+          400,
+          800,
+          400,
+          1000,
+        ]),
+        ticker: 'Study Buddy reminder',
+        category: AndroidNotificationCategory.reminder,
+        visibility: NotificationVisibility.public,
+      ),
+      iOS: const DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        interruptionLevel: InterruptionLevel.timeSensitive,
+      ),
+    );
+  }
 
-  /// Schedule a one-time task reminder.
   Future<void> scheduleTaskReminder({
     required String taskId,
     required String title,
@@ -156,7 +150,6 @@ class NotificationService {
     required DateTime fireAt,
   }) async {
     if (!_ready) return;
-
     if (fireAt.isBefore(DateTime.now())) return;
 
     await _plugin.zonedSchedule(
@@ -172,17 +165,12 @@ class NotificationService {
     );
   }
 
-  /// Cancel a task reminder.
   Future<void> cancelTaskReminder(String taskId) async {
     try {
       await _plugin.cancel(_idForTask(taskId));
     } catch (_) {}
   }
 
-  /// Schedule a recurring weekly class reminder.
-  ///
-  /// The class remains scheduled every week until the reminder is
-  /// disabled or the class is deleted.
   Future<void> scheduleClassReminder({
     required String classId,
     required String title,
@@ -216,16 +204,12 @@ class NotificationService {
     );
   }
 
-  /// Cancel a recurring class reminder.
   Future<void> cancelClassReminder(String classId) async {
     try {
       await _plugin.cancel(_idForClass(classId));
     } catch (_) {}
   }
 
-  /// Cancel every Study Buddy notification.
-  ///
-  /// Used by "Clear all data" so old reminders cannot remain scheduled.
   Future<void> cancelAll() async {
     try {
       await _plugin.cancelAll();
@@ -238,18 +222,7 @@ class NotificationService {
     int minute,
     int leadMinutes,
   ) {
-    // App format:
-    // 0 = Sunday
-    // 1 = Monday
-    // ...
-    // 6 = Saturday
-    //
-    // DateTime.weekday:
-    // 1 = Monday
-    // ...
-    // 7 = Sunday
     final targetWeekday = day == 0 ? 7 : day;
-
     final now = tz.TZDateTime.now(tz.local);
 
     var candidate = tz.TZDateTime(
