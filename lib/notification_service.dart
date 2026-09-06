@@ -23,8 +23,8 @@ class NotificationService {
     try {
       // Read the device's actual timezone rather than assuming one, so
       // reminders fire at the right local time wherever the student is.
-      final name = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(name.name));
+      final timezone = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timezone.identifier));
     } catch (_) {
       // If this fails, the timezone package's own default is used. Better
       // to proceed than to silently guess a specific region.
