@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -144,26 +145,52 @@ class NotificationService {
   }
 
   Future<void> scheduleTaskReminder({
-    required String taskId,
-    required String title,
-    required String body,
-    required DateTime fireAt,
-  }) async {
-    if (!_ready) return;
-    if (fireAt.isBefore(DateTime.now())) return;
-
-    await _plugin.zonedSchedule(
-      _idForTask(taskId),
-      title,
-      body,
-      tz.TZDateTime.from(fireAt, tz.local),
-      _details(),
-      androidScheduleMode:
-          AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-    );
+  required String taskId,
+  required String title,
+  required String body,
+  required DateTime fireAt,
+}) async {
+  if (!_ready) {
+    await init();
   }
+
+  final now = DateTime.now();
+
+  if (!fireAt.isAfter(now)) {
+    debugPrint(
+      'Study Buddy: reminder NOT scheduled because fireAt '
+      '($fireAt) is already in the past. Now: $now',
+    );
+    return;
+  }
+
+  final scheduledTime =
+      tz.TZDateTime.from(fireAt, tz.local);
+
+  debugPrint(
+    'Study Buddy: scheduling task reminder\n'
+    'Task: $title\n'
+    'Local fireAt: $fireAt\n'
+    'Timezone fireAt: $scheduledTime\n'
+    'Now: ${tz.TZDateTime.now(tz.local)}',
+  );
+
+  await _plugin.zonedSchedule(
+    _idForTask(taskId),
+    title,
+    body,
+    scheduledTime,
+    _details(),
+    androidScheduleMode:
+        AndroidScheduleMode.exactAllowWhileIdle,
+    uiLocalNotificationDateInterpretation:
+        UILocalNotificationDateInterpretation.absoluteTime,
+  );
+
+  debugPrint(
+    'Study Buddy: task reminder scheduled successfully.',
+  );
+}
 
   Future<void> cancelTaskReminder(String taskId) async {
     try {
