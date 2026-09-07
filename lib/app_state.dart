@@ -193,22 +193,41 @@ classCompletions = rawCompletions
   // ============================================================
 
   Future<void> addTask(Task task) async {
+  debugPrint('🟢 ADD TASK STARTED: ${task.title}');
+
   tasks.insert(0, task);
+
+  debugPrint(
+    '🟢 TASK INSERTED IN MEMORY. TASK COUNT = ${tasks.length}',
+  );
+
   notifyListeners();
 
   try {
     await _persistTasks();
-  } catch (e) {
-    // Roll back if saving failed.
+
+    debugPrint(
+      '🟢 TASK SAVED TO STORAGE SUCCESSFULLY',
+    );
+  } catch (e, stack) {
+    debugPrint(
+      '🔴 TASK STORAGE FAILED: $e',
+    );
+    debugPrint(
+      '$stack',
+    );
+
     tasks.removeWhere((t) => t.id == task.id);
+
     notifyListeners();
+
     rethrow;
   }
 
-  // Notification is completely separate from saving the task.
   _scheduleTaskSafely(task);
-}
 
+  debugPrint('🟢 ADD TASK FINISHED');
+}
   Future<void> updateTask(Task task) async {
   final index = tasks.indexWhere((t) => t.id == task.id);
 
