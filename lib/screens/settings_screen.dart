@@ -20,7 +20,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _checkingStatus = true;
 
   bool? _notifPermission;
+  bool? _exactAlarmPermission;
   bool _checkingNotifications = true;
+  bool _sendingTestNotification = false;
 
   @override
   void initState() {
@@ -63,9 +65,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final enabled =
             await androidImpl.areNotificationsEnabled();
 
+        // Notification permission and exact-alarm permission are two
+        // separate OS toggles on Android 12+. A user can have
+        // notifications "enabled" and reminders still never fire because
+        // "Alarms & reminders" is off — so we check both instead of only
+        // reporting the first one.
+        final exactAlarms =
+            await _notifications.canScheduleExactAlarms();
+
         if (mounted) {
           setState(() {
             _notifPermission = enabled;
+            _exactAlarmPermission = exactAlarms;
             _checkingNotifications = false;
           });
         }
@@ -81,6 +92,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() {
           _notifPermission = null;
+          _exactAlarmPermission = null;
           _checkingNotifications = false;
         });
       }
@@ -88,7 +100,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() {
           _notifPermission = null;
+          _exactAlarmPermission = null;
           _checkingNotifications = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _sendTestNotification() async {
+    setState(() {
+      _sendingTestNotification = true;
+    });
+
+    try {
+      await _notifications.showTestNotification();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Test notification sent — check your notification shade.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not send test notification: $e'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _sendingTestNotification = false;
         });
       }
     }
@@ -184,7 +231,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: _checkingNotifications
                   ? 'Checking notification permission...'
                   : _notifPermission == true
-                      ? 'Allowed'
+                      ? (_exactAlarmPermission == false
+                          ? 'Allowed, but exact alarms are off — reminders '
+                              'may arrive a little late. Enable "Alarms & '
+                              'reminders" for this app in system settings.'
+                          : 'Allowed')
                       : _notifPermission == false
                           ? 'Not allowed — check your phone\'s system settings'
                           : 'Tap to allow reminders to notify you',
@@ -198,6 +249,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : _notifPermission == true
                           ? 'Enabled'
                           : 'Enable',
+                ),
+              ),
+            ),
+
+            const Divider(height: 1),
+
+            _row(
+              'Test notification',
+              subtitle:
+                  'Sends one immediately, so you can tell whether '
+                  'notifications work at all before checking reminders',
+              trailing: FilledButton.tonal(
+                onPressed: _sendingTestNotification
+                    ? null
+                    : _sendTestNotification,
+                child: Text(
+                  _sendingTestNotification ? 'Sending' : 'Send',
                 ),
               ),
             ),

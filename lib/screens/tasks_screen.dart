@@ -52,7 +52,11 @@ class _TasksScreenState extends State<TasksScreen> {
     List<Task> list;
     switch (_filter) {
       case 'today':
-        list = today;
+        // Tasks with no due date have nowhere else to live, so they show
+        // up in "Today" too — otherwise a task created without a date
+        // (the simplest possible task) never appears anywhere the user
+        // is actually looking.
+        list = [...today, ...noDate];
         break;
       case 'upcoming':
         list = upcoming;
@@ -68,7 +72,7 @@ class _TasksScreenState extends State<TasksScreen> {
     }
 
     final tabs = [
-      ('today', 'Today', today.length),
+      ('today', 'Today', today.length + noDate.length),
       ('upcoming', 'Upcoming', upcoming.length),
       ('overdue', 'Overdue', overdue.length),
       ('completed', 'Completed', completed.length),
