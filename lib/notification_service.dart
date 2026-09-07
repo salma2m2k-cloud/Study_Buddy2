@@ -82,15 +82,13 @@ class NotificationService {
     debugPrint('Study Buddy: NotificationService READY');
   }
 
-  AndroidFlutterLocalNotificationsPlugin?
-      get androidImplementation =>
-          _plugin.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
+  AndroidFlutterLocalNotificationsPlugin? get androidImplementation =>
+      _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
 
-  IOSFlutterLocalNotificationsPlugin?
-      get iosImplementation =>
-          _plugin.resolvePlatformSpecificImplementation<
-              IOSFlutterLocalNotificationsPlugin>();
+  IOSFlutterLocalNotificationsPlugin? get iosImplementation =>
+      _plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
 
   Future<bool> requestPermissions() async {
     if (!_ready) {
@@ -150,25 +148,16 @@ class NotificationService {
     return granted;
   }
 
-  /// Whether the OS will currently allow us to schedule *exact*-time
-  /// alarms. On Android 12+ this is a separate toggle from the plain
-  /// notification permission — a user can allow notifications but still
-  /// have "Alarms & reminders" turned off, and `areNotificationsEnabled()`
-  /// has no idea that's the case. If we don't check this ourselves and
-  /// blindly request `AndroidScheduleMode.exactAllowWhileIdle`, the
-  /// platform throws (or, on some OEMs, just silently drops the alarm)
-  /// and nothing ever fires.
   Future<bool> canScheduleExactAlarms() async {
     final androidImpl = androidImplementation;
 
     if (androidImpl == null) {
-      // iOS/other platforms don't have this concept — exact scheduling
-      // is always fine there.
       return true;
     }
 
     try {
-      final can = await androidImpl.canScheduleExactNotifications();
+      final can =
+          await androidImpl.canScheduleExactNotifications();
 
       debugPrint(
         'Study Buddy: canScheduleExactNotifications = $can',
@@ -266,18 +255,23 @@ class NotificationService {
     debugPrint(
       '========================================',
     );
+
     debugPrint(
       'Study Buddy: TASK REMINDER',
     );
+
     debugPrint(
       'Task: $title',
     );
+
     debugPrint(
       'Current local time: $now',
     );
+
     debugPrint(
       'Requested fire time: $fireAt',
     );
+
     debugPrint(
       'Timezone: ${tz.local.name}',
     );
@@ -286,9 +280,11 @@ class NotificationService {
       debugPrint(
         'Study Buddy: NOT SCHEDULED — fire time is already past.',
       );
+
       debugPrint(
         '========================================',
       );
+
       return;
     }
 
@@ -299,7 +295,8 @@ class NotificationService {
       'Timezone scheduled time: $scheduledTime',
     );
 
-    final canExact = await canScheduleExactAlarms();
+    final canExact =
+        await canScheduleExactAlarms();
 
     final scheduleMode = canExact
         ? AndroidScheduleMode.exactAllowWhileIdle
@@ -325,15 +322,14 @@ class NotificationService {
       debugPrint(
         'Study Buddy: zonedSchedule THREW for task "$title": $e',
       );
+
       debugPrint('$stack');
 
-      // If we tried exact and the platform refused it (permission was
-      // revoked between the check and the call, or an OEM quirk), fall
-      // back once to an inexact alarm rather than losing the reminder
-      // entirely.
-      if (scheduleMode == AndroidScheduleMode.exactAllowWhileIdle) {
+      if (scheduleMode ==
+          AndroidScheduleMode.exactAllowWhileIdle) {
         debugPrint(
-          'Study Buddy: retrying task reminder with inexact scheduling',
+          'Study Buddy: retrying task reminder with '
+          'inexact scheduling',
         );
 
         await _plugin.zonedSchedule(
@@ -365,7 +361,8 @@ class NotificationService {
 
     for (final item in pending) {
       debugPrint(
-        'Pending ID=${item.id} title=${item.title}',
+        'Study Buddy: pending ID=${item.id} '
+        'title=${item.title}',
       );
     }
 
@@ -411,29 +408,45 @@ class NotificationService {
     debugPrint(
       '========================================',
     );
+
     debugPrint(
       'Study Buddy: CLASS REMINDER',
     );
+
     debugPrint(
       'Class: $title',
     );
+
+    debugPrint(
+      'Class ID: $classId',
+    );
+
     debugPrint(
       'Requested weekday: $day',
     );
+
     debugPrint(
       'Class time: $hour:$minute',
     );
+
     debugPrint(
       'Lead minutes: $leadMinutes',
     );
+
     debugPrint(
       'Timezone: ${tz.local.name}',
     );
+
+    debugPrint(
+      'Current timezone time: ${tz.TZDateTime.now(tz.local)}',
+    );
+
     debugPrint(
       'Next reminder: $fireAt',
     );
 
-    final canExact = await canScheduleExactAlarms();
+    final canExact =
+        await canScheduleExactAlarms();
 
     final scheduleMode = canExact
         ? AndroidScheduleMode.exactAllowWhileIdle
@@ -461,11 +474,14 @@ class NotificationService {
       debugPrint(
         'Study Buddy: zonedSchedule THREW for class "$title": $e',
       );
+
       debugPrint('$stack');
 
-      if (scheduleMode == AndroidScheduleMode.exactAllowWhileIdle) {
+      if (scheduleMode ==
+          AndroidScheduleMode.exactAllowWhileIdle) {
         debugPrint(
-          'Study Buddy: retrying class reminder with inexact scheduling',
+          'Study Buddy: retrying class reminder with '
+          'inexact scheduling',
         );
 
         await _plugin.zonedSchedule(
@@ -490,11 +506,47 @@ class NotificationService {
       'Study Buddy: CLASS REMINDER SCHEDULED SUCCESSFULLY',
     );
 
+    // ==========================================================
+    // CLASS SCHEDULING DIAGNOSTIC
+    // ==========================================================
+
     final pending =
         await _plugin.pendingNotificationRequests();
 
     debugPrint(
-      'Study Buddy: pending notifications = ${pending.length}',
+      '🔔 ===== CLASS PENDING CHECK =====',
+    );
+
+    debugPrint(
+      '🔔 Total pending notifications: ${pending.length}',
+    );
+
+    for (final item in pending) {
+      debugPrint(
+        '🔔 ID=${item.id} '
+        'TITLE=${item.title} '
+        'BODY=${item.body} '
+        'PAYLOAD=${item.payload}',
+      );
+    }
+
+    final expectedId =
+        _idForClass(classId);
+
+    final found = pending.any(
+      (item) => item.id == expectedId,
+    );
+
+    debugPrint(
+      '🔔 Expected class notification ID: $expectedId',
+    );
+
+    debugPrint(
+      '🔔 CLASS FOUND IN PENDING LIST: $found',
+    );
+
+    debugPrint(
+      '🔔 =============================',
     );
 
     debugPrint(
@@ -534,9 +586,11 @@ class NotificationService {
     int minute,
     int leadMinutes,
   ) {
-    final targetWeekday = day == 0 ? 7 : day;
+    final targetWeekday =
+        day == 0 ? 7 : day;
 
-    final now = tz.TZDateTime.now(tz.local);
+    final now =
+        tz.TZDateTime.now(tz.local);
 
     var candidate = tz.TZDateTime(
       tz.local,
@@ -550,9 +604,8 @@ class NotificationService {
     );
 
     while (
-      candidate.weekday != targetWeekday ||
-      !candidate.isAfter(now)
-    ) {
+        candidate.weekday != targetWeekday ||
+        !candidate.isAfter(now)) {
       candidate = candidate.add(
         const Duration(days: 1),
       );
