@@ -150,6 +150,39 @@ class NotificationService {
     return granted;
   }
 
+  /// Whether the OS will currently allow us to schedule *exact*-time
+  /// alarms. On Android 12+ this is a separate toggle from the plain
+  /// notification permission — a user can allow notifications but still
+  /// have "Alarms & reminders" turned off, and `areNotificationsEnabled()`
+  /// has no idea that's the case. If we don't check this ourselves and
+  /// blindly request `AndroidScheduleMode.exactAllowWhileIdle`, the
+  /// platform throws (or, on some OEMs, just silently drops the alarm)
+  /// and nothing ever fires.
+  Future<bool> canScheduleExactAlarms() async {
+    final androidImpl = androidImplementation;
+
+    if (androidImpl == null) {
+      // iOS/other platforms don't have this concept — exact scheduling
+      // is always fine there.
+      return true;
+    }
+
+    try {
+      final can = await androidImpl.canScheduleExactNotifications();
+
+      debugPrint(
+        'Study Buddy: canScheduleExactNotifications = $can',
+      );
+
+      return can ?? false;
+    } catch (e) {
+      debugPrint(
+        'Study Buddy: error checking exact alarm capability: $e',
+      );
+      return false;
+    }
+  }
+
   int _idForTask(String taskId) =>
       ('task:$taskId').hashCode & 0x7fffffff;
 
@@ -266,17 +299,58 @@ class NotificationService {
       'Timezone scheduled time: $scheduledTime',
     );
 
-    await _plugin.zonedSchedule(
-      _idForTask(taskId),
-      title,
-      body,
-      scheduledTime,
-      _details(),
-      androidScheduleMode:
-          AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
+    final canExact = await canScheduleExactAlarms();
+
+    final scheduleMode = canExact
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+
+    debugPrint(
+      'Study Buddy: using schedule mode = $scheduleMode '
+      '(exact alarms allowed = $canExact)',
     );
+
+    try {
+      await _plugin.zonedSchedule(
+        _idForTask(taskId),
+        title,
+        body,
+        scheduledTime,
+        _details(),
+        androidScheduleMode: scheduleMode,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } catch (e, stack) {
+      debugPrint(
+        'Study Buddy: zonedSchedule THREW for task "$title": $e',
+      );
+      debugPrint('$stack');
+
+      // If we tried exact and the platform refused it (permission was
+      // revoked between the check and the call, or an OEM quirk), fall
+      // back once to an inexact alarm rather than losing the reminder
+      // entirely.
+      if (scheduleMode == AndroidScheduleMode.exactAllowWhileIdle) {
+        debugPrint(
+          'Study Buddy: retrying task reminder with inexact scheduling',
+        );
+
+        await _plugin.zonedSchedule(
+          _idForTask(taskId),
+          title,
+          body,
+          scheduledTime,
+          _details(),
+          androidScheduleMode:
+              AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+      } else {
+        rethrow;
+      }
+    }
 
     debugPrint(
       'Study Buddy: TASK REMINDER SCHEDULED SUCCESSFULLY',
@@ -359,19 +433,58 @@ class NotificationService {
       'Next reminder: $fireAt',
     );
 
-    await _plugin.zonedSchedule(
-      _idForClass(classId),
-      title,
-      body,
-      fireAt,
-      _details(),
-      androidScheduleMode:
-          AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents:
-          DateTimeComponents.dayOfWeekAndTime,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
+    final canExact = await canScheduleExactAlarms();
+
+    final scheduleMode = canExact
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+
+    debugPrint(
+      'Study Buddy: using schedule mode = $scheduleMode '
+      '(exact alarms allowed = $canExact)',
     );
+
+    try {
+      await _plugin.zonedSchedule(
+        _idForClass(classId),
+        title,
+        body,
+        fireAt,
+        _details(),
+        androidScheduleMode: scheduleMode,
+        matchDateTimeComponents:
+            DateTimeComponents.dayOfWeekAndTime,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } catch (e, stack) {
+      debugPrint(
+        'Study Buddy: zonedSchedule THREW for class "$title": $e',
+      );
+      debugPrint('$stack');
+
+      if (scheduleMode == AndroidScheduleMode.exactAllowWhileIdle) {
+        debugPrint(
+          'Study Buddy: retrying class reminder with inexact scheduling',
+        );
+
+        await _plugin.zonedSchedule(
+          _idForClass(classId),
+          title,
+          body,
+          fireAt,
+          _details(),
+          androidScheduleMode:
+              AndroidScheduleMode.inexactAllowWhileIdle,
+          matchDateTimeComponents:
+              DateTimeComponents.dayOfWeekAndTime,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+      } else {
+        rethrow;
+      }
+    }
 
     debugPrint(
       'Study Buddy: CLASS REMINDER SCHEDULED SUCCESSFULLY',

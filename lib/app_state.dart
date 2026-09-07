@@ -282,8 +282,14 @@ classCompletions = rawCompletions
   Future<void> _scheduleTaskSafely(Task task) async {
     try {
       await _scheduleTaskIfNeeded(task);
-    } catch (_) {
-      // Notification failure must never affect task data.
+    } catch (e, stack) {
+      // Notification failure must never affect task data — but we still
+      // want to know it happened instead of failing completely silently.
+      debugPrint(
+        '🔴 Study Buddy: failed to schedule reminder for '
+        'task "${task.title}": $e',
+      );
+      debugPrint('$stack');
     }
   }
 
@@ -291,8 +297,11 @@ classCompletions = rawCompletions
     try {
       await _notifications.cancelTaskReminder(task.id);
       await _scheduleTaskIfNeeded(task);
-    } catch (_) {
-      // Ignore notification errors.
+    } catch (e) {
+      debugPrint(
+        '🔴 Study Buddy: failed to update reminder for '
+        'task "${task.title}": $e',
+      );
     }
   }
 
@@ -303,16 +312,21 @@ classCompletions = rawCompletions
       } else {
         await _scheduleTaskIfNeeded(task);
       }
-    } catch (_) {
-      // Ignore notification errors.
+    } catch (e) {
+      debugPrint(
+        '🔴 Study Buddy: failed to toggle reminder for '
+        'task "${task.title}": $e',
+      );
     }
   }
 
   Future<void> _cancelTaskReminderSafely(String id) async {
     try {
       await _notifications.cancelTaskReminder(id);
-    } catch (_) {
-      // Ignore notification errors.
+    } catch (e) {
+      debugPrint(
+        '🔴 Study Buddy: failed to cancel reminder for task "$id": $e',
+      );
     }
   }
 
@@ -391,8 +405,14 @@ classCompletions = rawCompletions
   ) async {
     try {
       await _scheduleClassIfNeeded(classItem);
-    } catch (_) {
-      // Notification failure must never affect class data.
+    } catch (e, stack) {
+      // Notification failure must never affect class data — but we still
+      // want to know it happened instead of failing completely silently.
+      debugPrint(
+        '🔴 Study Buddy: failed to schedule reminder for '
+        'class "${classItem.name}": $e',
+      );
+      debugPrint('$stack');
     }
   }
 
@@ -405,16 +425,21 @@ classCompletions = rawCompletions
       );
 
       await _scheduleClassIfNeeded(classItem);
-    } catch (_) {
-      // Ignore notification errors.
+    } catch (e) {
+      debugPrint(
+        '🔴 Study Buddy: failed to update reminder for '
+        'class "${classItem.name}": $e',
+      );
     }
   }
 
   Future<void> _cancelClassReminderSafely(String id) async {
     try {
       await _notifications.cancelClassReminder(id);
-    } catch (_) {
-      // Ignore notification errors.
+    } catch (e) {
+      debugPrint(
+        '🔴 Study Buddy: failed to cancel reminder for class "$id": $e',
+      );
     }
   }
 
@@ -591,16 +616,24 @@ double get weeklyClassProgress {
 
       try {
         await _scheduleTaskIfNeeded(task);
-      } catch (_) {
+      } catch (e) {
         // One broken task reminder must not affect anything else.
+        debugPrint(
+          '🔴 Study Buddy: failed to restore reminder for '
+          'task "${task.title}": $e',
+        );
       }
     }
 
     for (final classItem in classes) {
       try {
         await _scheduleClassIfNeeded(classItem);
-      } catch (_) {
+      } catch (e) {
         // One broken class reminder must not affect anything else.
+        debugPrint(
+          '🔴 Study Buddy: failed to restore reminder for '
+          'class "${classItem.name}": $e',
+        );
       }
     }
   }
