@@ -157,6 +157,12 @@ class _TaskFormSheetState extends State<_TaskFormSheet> {
         task.reminder = _reminder;
         task.reminderLead = state.settings.reminderLead;
 
+        debugPrint(
+          '📝 Study Buddy: SAVING (update) task id=${task.id} '
+          'title="${task.title}" date=$dateStr time=$timeStr '
+          'reminder=$_reminder reminderLead=${task.reminderLead}',
+        );
+
         await state.updateTask(task);
       } else {
         final task = Task(
@@ -168,6 +174,12 @@ class _TaskFormSheetState extends State<_TaskFormSheet> {
           reminder: _reminder,
           reminderLead: state.settings.reminderLead,
           createdAt: DateTime.now().toIso8601String(),
+        );
+
+        debugPrint(
+          '📝 Study Buddy: SAVING (new) task id=${task.id} '
+          'title="${task.title}" date=$dateStr time=$timeStr '
+          'reminder=$_reminder reminderLead=${task.reminderLead}',
         );
 
         await state.addTask(task);

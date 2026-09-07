@@ -172,6 +172,12 @@ class _ClassFormSheetState extends State<_ClassFormSheet> {
         c.reminder = _reminder;
         c.reminderLead = state.settings.reminderLead;
 
+        debugPrint(
+          '📝 Study Buddy: SAVING (update) class id=${c.id} '
+          'name="${c.name}" day=${c.day} startTime=${c.startTime} '
+          'reminder=$_reminder reminderLead=${c.reminderLead}',
+        );
+
         await state.updateClass(c);
       } else {
         final newClass = ClassItem(
@@ -186,6 +192,13 @@ class _ClassFormSheetState extends State<_ClassFormSheet> {
           notes: _notes.text.trim(),
           reminder: _reminder,
           reminderLead: state.settings.reminderLead,
+        );
+
+        debugPrint(
+          '📝 Study Buddy: SAVING (new) class id=${newClass.id} '
+          'name="${newClass.name}" day=${newClass.day} '
+          'startTime=${newClass.startTime} reminder=$_reminder '
+          'reminderLead=${newClass.reminderLead}',
         );
 
         await state.addClass(newClass);
