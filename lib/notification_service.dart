@@ -12,7 +12,7 @@ class NotificationService {
 
   bool _ready = false;
 
-  static const _channelId = 'study_buddy_alarm_reminders_v2';
+  static const _channelId = 'study_buddy_alarm_reminders_v3';
   static const _channelName = 'Study Buddy Reminders';
   static const _channelDescription =
       'Important reminders for tasks and upcoming classes.';
@@ -24,8 +24,23 @@ class NotificationService {
 
     try {
       final timezone = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(timezone.identifier));
-    } catch (_) {}
+
+      debugPrint(
+        'Study Buddy: device timezone = ${timezone.identifier}',
+      );
+
+      tz.setLocalLocation(
+        tz.getLocation(timezone.identifier),
+      );
+
+      debugPrint(
+        'Study Buddy: timezone configured = ${tz.local.name}',
+      );
+    } catch (e) {
+      debugPrint(
+        'Study Buddy: could not determine timezone: $e',
+      );
+    }
 
     const androidInit =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -36,11 +51,15 @@ class NotificationService {
       requestSoundPermission: false,
     );
 
-    await _plugin.initialize(
+    final initialized = await _plugin.initialize(
       const InitializationSettings(
         android: androidInit,
         iOS: iosInit,
       ),
+    );
+
+    debugPrint(
+      'Study Buddy: notification plugin initialized = $initialized',
     );
 
     const channel = AndroidNotificationChannel(
@@ -59,6 +78,8 @@ class NotificationService {
         ?.createNotificationChannel(channel);
 
     _ready = true;
+
+    debugPrint('Study Buddy: NotificationService READY');
   }
 
   AndroidFlutterLocalNotificationsPlugin?
@@ -81,27 +102,49 @@ class NotificationService {
     final androidImpl = androidImplementation;
 
     if (androidImpl != null) {
-      final notifGranted =
-          await androidImpl.requestNotificationsPermission();
+      try {
+        final notificationGranted =
+            await androidImpl.requestNotificationsPermission();
 
-      final exactGranted =
-          await androidImpl.requestExactAlarmsPermission();
+        debugPrint(
+          'Study Buddy: notification permission = '
+          '$notificationGranted',
+        );
 
-      granted = granted &&
-          (notifGranted ?? true) &&
-          (exactGranted ?? true);
+        final exactGranted =
+            await androidImpl.requestExactAlarmsPermission();
+
+        debugPrint(
+          'Study Buddy: exact alarm permission request result = '
+          '$exactGranted',
+        );
+
+        granted =
+            (notificationGranted ?? true) &&
+            (exactGranted ?? true);
+      } catch (e, stack) {
+        debugPrint(
+          'Study Buddy: Android permission error: $e\n$stack',
+        );
+      }
     }
 
     final iosImpl = iosImplementation;
 
     if (iosImpl != null) {
-      final iosGranted = await iosImpl.requestPermissions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+      try {
+        final iosGranted = await iosImpl.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
 
-      granted = granted && (iosGranted ?? true);
+        granted = granted && (iosGranted ?? true);
+      } catch (e) {
+        debugPrint(
+          'Study Buddy: iOS permission error: $e',
+        );
+      }
     }
 
     return granted;
@@ -112,6 +155,8 @@ class NotificationService {
 
   int _idForClass(String classId) =>
       ('class:$classId').hashCode & 0x7fffffff;
+
+  static const _testId = 2147483000;
 
   NotificationDetails _details() {
     return NotificationDetails(
@@ -144,59 +189,130 @@ class NotificationService {
     );
   }
 
-  Future<void> scheduleTaskReminder({
-  required String taskId,
-  required String title,
-  required String body,
-  required DateTime fireAt,
-}) async {
-  if (!_ready) {
-    await init();
-  }
+  // ============================================================
+  // IMMEDIATE TEST
+  // ============================================================
 
-  final now = DateTime.now();
+  Future<void> showTestNotification() async {
+    if (!_ready) {
+      await init();
+    }
 
-  if (!fireAt.isAfter(now)) {
     debugPrint(
-      'Study Buddy: reminder NOT scheduled because fireAt '
-      '($fireAt) is already in the past. Now: $now',
+      'Study Buddy: SHOWING TEST NOTIFICATION',
     );
-    return;
+
+    await _plugin.show(
+      _testId,
+      'Study Buddy test 🔔',
+      'Notifications are working!',
+      _details(),
+    );
+
+    debugPrint(
+      'Study Buddy: TEST NOTIFICATION SENT',
+    );
   }
 
-  final scheduledTime =
-      tz.TZDateTime.from(fireAt, tz.local);
+  // ============================================================
+  // TASK REMINDERS
+  // ============================================================
 
-  debugPrint(
-    'Study Buddy: scheduling task reminder\n'
-    'Task: $title\n'
-    'Local fireAt: $fireAt\n'
-    'Timezone fireAt: $scheduledTime\n'
-    'Now: ${tz.TZDateTime.now(tz.local)}',
-  );
+  Future<void> scheduleTaskReminder({
+    required String taskId,
+    required String title,
+    required String body,
+    required DateTime fireAt,
+  }) async {
+    if (!_ready) {
+      await init();
+    }
 
-  await _plugin.zonedSchedule(
-    _idForTask(taskId),
-    title,
-    body,
-    scheduledTime,
-    _details(),
-    androidScheduleMode:
-        AndroidScheduleMode.exactAllowWhileIdle,
-    uiLocalNotificationDateInterpretation:
-        UILocalNotificationDateInterpretation.absoluteTime,
-  );
+    final now = DateTime.now();
 
-  debugPrint(
-    'Study Buddy: task reminder scheduled successfully.',
-  );
-}
+    debugPrint(
+      '========================================',
+    );
+    debugPrint(
+      'Study Buddy: TASK REMINDER',
+    );
+    debugPrint(
+      'Task: $title',
+    );
+    debugPrint(
+      'Current local time: $now',
+    );
+    debugPrint(
+      'Requested fire time: $fireAt',
+    );
+    debugPrint(
+      'Timezone: ${tz.local.name}',
+    );
+
+    if (!fireAt.isAfter(now)) {
+      debugPrint(
+        'Study Buddy: NOT SCHEDULED — fire time is already past.',
+      );
+      debugPrint(
+        '========================================',
+      );
+      return;
+    }
+
+    final scheduledTime =
+        tz.TZDateTime.from(fireAt, tz.local);
+
+    debugPrint(
+      'Timezone scheduled time: $scheduledTime',
+    );
+
+    await _plugin.zonedSchedule(
+      _idForTask(taskId),
+      title,
+      body,
+      scheduledTime,
+      _details(),
+      androidScheduleMode:
+          AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+
+    debugPrint(
+      'Study Buddy: TASK REMINDER SCHEDULED SUCCESSFULLY',
+    );
+
+    final pending =
+        await _plugin.pendingNotificationRequests();
+
+    debugPrint(
+      'Study Buddy: pending notifications = ${pending.length}',
+    );
+
+    for (final item in pending) {
+      debugPrint(
+        'Pending ID=${item.id} title=${item.title}',
+      );
+    }
+
+    debugPrint(
+      '========================================',
+    );
+  }
 
   Future<void> cancelTaskReminder(String taskId) async {
-    try {
-      await _plugin.cancel(_idForTask(taskId));
-    } catch (_) {}
+    if (!_ready) {
+      await init();
+    }
+
+    await _plugin.cancel(
+      _idForTask(taskId),
+    );
   }
+
+  // ============================================================
+  // CLASS REMINDERS
+  // ============================================================
 
   Future<void> scheduleClassReminder({
     required String classId,
@@ -207,13 +323,40 @@ class NotificationService {
     required int minute,
     required int leadMinutes,
   }) async {
-    if (!_ready) return;
+    if (!_ready) {
+      await init();
+    }
 
     final fireAt = _nextWeeklyOccurrence(
       day,
       hour,
       minute,
       leadMinutes,
+    );
+
+    debugPrint(
+      '========================================',
+    );
+    debugPrint(
+      'Study Buddy: CLASS REMINDER',
+    );
+    debugPrint(
+      'Class: $title',
+    );
+    debugPrint(
+      'Requested weekday: $day',
+    );
+    debugPrint(
+      'Class time: $hour:$minute',
+    );
+    debugPrint(
+      'Lead minutes: $leadMinutes',
+    );
+    debugPrint(
+      'Timezone: ${tz.local.name}',
+    );
+    debugPrint(
+      'Next reminder: $fireAt',
     );
 
     await _plugin.zonedSchedule(
@@ -229,19 +372,48 @@ class NotificationService {
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );
+
+    debugPrint(
+      'Study Buddy: CLASS REMINDER SCHEDULED SUCCESSFULLY',
+    );
+
+    final pending =
+        await _plugin.pendingNotificationRequests();
+
+    debugPrint(
+      'Study Buddy: pending notifications = ${pending.length}',
+    );
+
+    debugPrint(
+      '========================================',
+    );
   }
 
   Future<void> cancelClassReminder(String classId) async {
-    try {
-      await _plugin.cancel(_idForClass(classId));
-    } catch (_) {}
+    if (!_ready) {
+      await init();
+    }
+
+    await _plugin.cancel(
+      _idForClass(classId),
+    );
   }
 
+  // ============================================================
+  // CANCEL EVERYTHING
+  // ============================================================
+
   Future<void> cancelAll() async {
-    try {
-      await _plugin.cancelAll();
-    } catch (_) {}
+    if (!_ready) {
+      await init();
+    }
+
+    await _plugin.cancelAll();
   }
+
+  // ============================================================
+  // NEXT WEEKLY OCCURRENCE
+  // ============================================================
 
   tz.TZDateTime _nextWeeklyOccurrence(
     int day,
@@ -250,6 +422,7 @@ class NotificationService {
     int leadMinutes,
   ) {
     final targetWeekday = day == 0 ? 7 : day;
+
     final now = tz.TZDateTime.now(tz.local);
 
     var candidate = tz.TZDateTime(
@@ -264,8 +437,9 @@ class NotificationService {
     );
 
     while (
-        candidate.weekday != targetWeekday ||
-        candidate.isBefore(now)) {
+      candidate.weekday != targetWeekday ||
+      !candidate.isAfter(now)
+    ) {
       candidate = candidate.add(
         const Duration(days: 1),
       );
