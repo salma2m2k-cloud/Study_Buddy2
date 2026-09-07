@@ -193,34 +193,42 @@ classCompletions = rawCompletions
   // ============================================================
 
   Future<void> addTask(Task task) async {
-    tasks.insert(0, task);
+  tasks.insert(0, task);
+  notifyListeners();
 
-    // Save first.
+  try {
     await _persistTasks();
-
-    // Tell the UI immediately.
+  } catch (e) {
+    // Roll back if saving failed.
+    tasks.removeWhere((t) => t.id == task.id);
     notifyListeners();
-
-    // Notification is secondary.
-    _scheduleTaskSafely(task);
+    rethrow;
   }
+
+  // Notification is completely separate from saving the task.
+  _scheduleTaskSafely(task);
+}
 
   Future<void> updateTask(Task task) async {
-    final index = tasks.indexWhere((t) => t.id == task.id);
+  final index = tasks.indexWhere((t) => t.id == task.id);
 
-    if (index == -1) return;
+  if (index == -1) return;
 
-    tasks[index] = task;
+  final oldTask = tasks[index];
 
-    // Save first.
+  tasks[index] = task;
+  notifyListeners();
+
+  try {
     await _persistTasks();
-
-    // Update UI immediately.
+  } catch (e) {
+    tasks[index] = oldTask;
     notifyListeners();
-
-    // Notification work happens separately.
-    _updateTaskReminderSafely(task);
+    rethrow;
   }
+
+  _updateTaskReminderSafely(task);
+}
 
   Future<void> toggleTask(String id) async {
     final index = tasks.indexWhere((t) => t.id == id);
